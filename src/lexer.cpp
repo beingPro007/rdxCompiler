@@ -1,41 +1,81 @@
 #include "lexer.h"
 #include <cctype>
+#include <stdexcept>
+#include <iostream> // Add this line at the top of your lexer.cpp
 
-Lexer::Lexer(const std::string &input) : input(input), pos(0) {}
+Lexer::Lexer(const std::string &input) : input(input), pos(0)
+{
+    currentChar = pos < input.size() ? input[pos] : '\0';
+}
 
 void Lexer::advance()
 {
     pos++;
+    currentChar = pos < input.size() ? input[pos] : '\0';
+}
+
+char Lexer::peek()
+{
+    return (pos + 1 < input.size()) ? input[pos + 1] : '\0';
+}
+
+void Lexer::skipWhitespace()
+{
+    while (isspace(currentChar))
+    {
+        advance();
+    }
+}
+
+std::string Lexer::number()
+{
+    std::string result;
+    while (isdigit(currentChar))
+    {
+        result += currentChar;
+        advance();
+    }
+    return result;
+}
+
+std::string Lexer::identifier()
+{
+    std::string result;
+    while (isalnum(currentChar) || currentChar == '_')
+    {
+        result += currentChar;
+        advance();
+    }
+    return result;
 }
 
 std::vector<Token> Lexer::tokenize()
 {
     std::vector<Token> tokens;
 
-    while (pos < input.length())
+    while (currentChar != '\0')
     {
-        char currentChar = input[pos];
+        skipWhitespace();
 
+        // Tokenize numbers
         if (isdigit(currentChar))
         {
-            std::string num;
-            while (pos < input.length() && isdigit(input[pos]))
-            {
-                num += input[pos];
-                advance();
-            }
-            tokens.push_back({TokenType::NUMBER, num});
+            tokens.push_back({TokenType::NUMBER, number()});
         }
-        else if (isalpha(currentChar)) // Detect variable names (identifiers)
+        // Tokenize identifiers and keywords (if, else, while)
+        else if (isalpha(currentChar))
         {
-            std::string id;
-            while (pos < input.length() && isalnum(input[pos]))
-            {
-                id += input[pos];
-                advance();
-            }
-            tokens.push_back({TokenType::IDENTIFIER, id});
+            std::string id = identifier();
+            if (id == "if")
+                tokens.push_back({TokenType::IF, id});
+            else if (id == "else")
+                tokens.push_back({TokenType::ELSE, id});
+            else if (id == "while")
+                tokens.push_back({TokenType::WHILE, id});
+            else
+                tokens.push_back({TokenType::IDENTIFIER, id});
         }
+        // Tokenize arithmetic operators
         else if (currentChar == '+')
         {
             tokens.push_back({TokenType::PLUS, "+"});
@@ -56,6 +96,7 @@ std::vector<Token> Lexer::tokenize()
             tokens.push_back({TokenType::DIVIDE, "/"});
             advance();
         }
+        // Tokenize parentheses and braces
         else if (currentChar == '(')
         {
             tokens.push_back({TokenType::LPAREN, "("});
@@ -66,45 +107,89 @@ std::vector<Token> Lexer::tokenize()
             tokens.push_back({TokenType::RPAREN, ")"});
             advance();
         }
-        else if (currentChar == '=')
-        {
-            tokens.push_back({TokenType::ASSIGN, "="});
-            advance();
-        }
         else if (currentChar == '{')
         {
             tokens.push_back({TokenType::LBRACE, "{"});
-            pos++;
+            advance();
         }
         else if (currentChar == '}')
         {
             tokens.push_back({TokenType::RBRACE, "}"});
-            pos++;
+            advance();
         }
-        else if (std::isalpha(currentChar))
+        // Tokenize semicolons
+        else if (currentChar == ';')
         {
-            std::string identifier;
-            while (pos < input.length() && std::isalnum(input[pos]))
-            {
-                identifier += input[pos++];
-            }
-
-            if (identifier == "if")
-                tokens.push_back({TokenType::IF, identifier});
-            else if (identifier == "else")
-                tokens.push_back({TokenType::ELSE, identifier});
-            else if (identifier == "while")
-                tokens.push_back({TokenType::WHILE, identifier});
-            else
-                tokens.push_back({TokenType::IDENTIFIER, identifier});
+            tokens.push_back({TokenType::SEMICOLON, ";"});
+            advance();
         }
-
+        // Tokenize assignment operator
+        else if (currentChar == '=')
+        {
+            if (peek() == '=')
+            {
+                advance();
+                advance();
+                tokens.push_back({TokenType::EQ, "=="});
+            }
+            else
+            {
+                tokens.push_back({TokenType::ASSIGN, "="});
+                advance();
+            }
+        }
+        // Tokenize comparison operators
+        else if (currentChar == '!')
+        {
+            if (peek() == '=')
+            {
+                advance();
+                advance();
+                tokens.push_back({TokenType::NEQ, "!="});
+            }
+            else
+            {
+                throw std::runtime_error("Unexpected character '!' at position " + std::to_string(pos));
+            }
+        }
+        else if (currentChar == '<')
+        {
+            if (peek() == '=')
+            {
+                advance();
+                advance();
+                tokens.push_back({TokenType::LE, "<="});
+            }
+            else
+            {
+                tokens.push_back({TokenType::LT, "<"});
+                advance();
+            }
+        }
+        else if (currentChar == '>')
+        {
+            if (peek() == '=')
+            {
+                advance();
+                advance();
+                tokens.push_back({TokenType::GE, ">="});
+            }
+            else
+            {
+                tokens.push_back({TokenType::GT, ">"});
+                advance();
+            }
+        }
+        // Handle unexpected characters
         else
         {
-            advance(); // Ignore spaces and unknown characters
+            throw std::runtime_error("Unexpected character: " + std::string(1, currentChar));
         }
+
     }
 
+    // Add the END token to mark the end of the input
     tokens.push_back({TokenType::END, ""});
+
     return tokens;
 }

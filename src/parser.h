@@ -1,47 +1,51 @@
 #ifndef PARSER_H
 #define PARSER_H
 
-#include <vector>
-#include <string>
-#include <unordered_map>
 #include "lexer.h"
+#include <map>
 
-// Forward declare Parser class here if necessary
-class Parser;
-
-// AST Node definition
+// AST Node Structure
 struct ASTNode
 {
     TokenType type;
     std::string value;
-    ASTNode *left, *right;
+    ASTNode *left;
+    ASTNode *right;
+    ASTNode *extra; // For third child (e.g., else block)
 
-    ASTNode(TokenType type, std::string value)
-        : type(type), value(value), left(nullptr), right(nullptr) {}
-
-    ASTNode(TokenType type, std::string value, ASTNode *left, ASTNode *right)
-        : type(type), value(value), left(left), right(right) {}
+    ASTNode(TokenType type, const std::string &value,
+            ASTNode *left = nullptr, ASTNode *right = nullptr, ASTNode *extra = nullptr)
+        : type(type), value(value), left(left), right(right), extra(extra) {}
 };
 
-// Parser class declaration
 class Parser
 {
-public:
-    Parser(const std::vector<Token> &tokens);
-    ASTNode *parse();
-    ASTNode *expression();
-    ASTNode *term();
-    ASTNode *factor();
-    ASTNode *assignment();
-    void eat(TokenType type);
-    Token getCurrentToken();
-    void printAST(ASTNode *node, int depth);
-    int evaluate(ASTNode *node); // ← move this here
-
 private:
     std::vector<Token> tokens;
     size_t pos;
-    std::unordered_map<std::string, int> variables;
+
+    Token getCurrentToken();
+    Token getNextToken();
+    void eat(TokenType type);
+
+    // Expression parsing
+    ASTNode *factor();
+    ASTNode *term();
+    ASTNode *expression();
+
+    // Statements
+    ASTNode *statement();
+    ASTNode *assignmentStatement();
+    ASTNode *ifStatement();
+    ASTNode *block();
+
+public:
+    Parser(const std::vector<Token> &tokens);
+    ASTNode *parse();
+    void printAST(ASTNode *node, int depth = 0);
+
+    int evaluate(ASTNode *node); // for testing/interpretation
+    std::map<std::string, int> variables;
 };
 
 #endif // PARSER_H

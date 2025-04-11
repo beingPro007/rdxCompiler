@@ -2,51 +2,48 @@
 #include <iostream>
 #include <stdexcept>
 
-Parser::Parser(const std::vector<Token> &tokens) : tokens(tokens), pos(0) {} // Fix: Correct constructor
+Parser::Parser(const std::vector<Token> &tokens) : tokens(tokens), pos(0) {}
 
 Token Parser::getCurrentToken()
 {
-    if (pos < tokens.size())
-        return tokens[pos];
-    return {TokenType::END, ""};
+    return (pos < tokens.size()) ? tokens[pos] : Token{TokenType::END, ""};
+}
+
+Token Parser::getNextToken()
+{
+    return (pos + 1 < tokens.size()) ? tokens[pos + 1] : Token{TokenType::END, ""};
 }
 
 void Parser::eat(TokenType type)
 {
     if (getCurrentToken().type == type)
+    {
+        std::cout << "Eating token: " << getCurrentToken().value << "\n"; // Debugging line
         pos++;
+    }
     else
+    {
+        std::cerr << "Unexpected token: " << getCurrentToken().value << " at position " << pos << "\n"; // Debugging line
         throw std::runtime_error("Syntax Error: Unexpected token");
+    }
 }
 
-// Factor handles numbers, variables, and expressions inside parentheses
+// ----- Expression Parsing -----
+
 ASTNode *Parser::factor()
 {
     Token token = getCurrentToken();
 
-    // If the token is a number, return a new ASTNode for that number
     if (token.type == TokenType::NUMBER)
     {
         eat(TokenType::NUMBER);
         return new ASTNode(token.type, token.value);
     }
-    // If it's an identifier (variable), look it up in the map
     else if (token.type == TokenType::IDENTIFIER)
     {
-        std::string varName = token.value;
         eat(TokenType::IDENTIFIER);
-
-        // Look up the variable's value in the map
-        if (variables.find(varName) != variables.end())
-        {
-            return new ASTNode(TokenType::NUMBER, std::to_string(variables[varName]));
-        }
-        else
-        {
-            throw std::runtime_error("Error: Undefined variable " + varName);
-        }
+        return new ASTNode(TokenType::IDENTIFIER, token.value);
     }
-    // If it's a left parenthesis, parse an expression inside parentheses
     else if (token.type == TokenType::LPAREN)
     {
         eat(TokenType::LPAREN);
@@ -55,67 +52,9 @@ ASTNode *Parser::factor()
         return node;
     }
 
-    throw std::runtime_error("Unexpected token in factor()");
+    throw std::runtime_error("Syntax Error in factor()");
 }
 
-// Assignment handles assignment expressions like x = 5 + 3
-ASTNode *Parser::assignment()
-{
-    if (getCurrentToken().type == TokenType::IDENTIFIER)
-    {
-        std::string varName = getCurrentToken().value;
-        eat(TokenType::IDENTIFIER); // Eat the identifier
-
-        eat(TokenType::ASSIGN); // Eat the '=' token
-
-        ASTNode *expr = expression(); // Parse the right-hand side expression
-
-        // Store the result of the assignment
-        int value = evaluate(expr); // Evaluate the right-hand side
-        variables[varName] = value; // Store in the variables map
-
-        // Return the assignment AST node
-        return new ASTNode(TokenType::ASSIGN, varName, expr, nullptr);
-    }
-
-    return nullptr; // If it's not an assignment, return nullptr
-}
-
-// Evaluates an ASTNode and returns the result
-int Parser::evaluate(ASTNode *node)
-{
-    if (node->type == TokenType::NUMBER)
-    {
-        return std::stoi(node->value); // Convert number string to integer
-    }
-    else if (node->type == TokenType::PLUS)
-    {
-        return evaluate(node->left) + evaluate(node->right);
-    }
-    else if (node->type == TokenType::MINUS)
-    {
-        return evaluate(node->left) - evaluate(node->right);
-    }
-    else if (node->type == TokenType::MULTIPLY)
-    {
-        return evaluate(node->left) * evaluate(node->right);
-    }
-    else if (node->type == TokenType::DIVIDE)
-    {
-        return evaluate(node->left) / evaluate(node->right);
-    }
-    else if (node->type == TokenType::ASSIGN)
-    {
-        // Evaluate the right-hand side of the assignment and store it
-        int value = evaluate(node->left); // Right-hand side expression
-        variables[node->value] = value;   // Store the value in the variables map
-        return value;                     // Return the assigned value
-    }
-
-    throw std::runtime_error("Unknown node type during evaluation");
-}
-
-// Term handles multiplication and division
 ASTNode *Parser::term()
 {
     ASTNode *node = factor();
@@ -123,57 +62,164 @@ ASTNode *Parser::term()
     while (getCurrentToken().type == TokenType::MULTIPLY ||
            getCurrentToken().type == TokenType::DIVIDE)
     {
-        Token token = getCurrentToken();
-        eat(token.type);
-        node = new ASTNode(token.type, token.value, node, factor()); // Fix: Use correct constructor
+        Token op = getCurrentToken();
+        eat(op.type);
+        node = new ASTNode(op.type, op.value, node, factor());
     }
 
     return node;
 }
 
-// Expression handles addition and subtraction as well as assignments
 ASTNode *Parser::expression()
 {
-    ASTNode *node = assignment(); // Try parsing assignment first
+    ASTNode *node = term();
 
-    if (node == nullptr)
+    while (getCurrentToken().type == TokenType::PLUS ||
+           getCurrentToken().type == TokenType::MINUS ||
+           getCurrentToken().type == TokenType::GE || // Greater than or equal
+           getCurrentToken().type == TokenType::LE || // Less than or equal
+           getCurrentToken().type == TokenType::GT || // Greater than
+           getCurrentToken().type == TokenType::LT || // Less than
+           getCurrentToken().type == TokenType::EQ || // Equal
+           getCurrentToken().type == TokenType::NEQ)  // Not equal
     {
-        node = term(); // If it's not an assignment, fall back to normal expression parsing
-    }
-
-    while (getCurrentToken().type == TokenType::PLUS || getCurrentToken().type == TokenType::MINUS)
-    {
-        Token token = getCurrentToken();
-        eat(token.type);
-        node = new ASTNode(token.type, token.value, node, term());
+        Token op = getCurrentToken();
+        eat(op.type);
+        node = new ASTNode(op.type, op.value, node, term());
     }
 
     return node;
 }
 
-// Parse the entire expression and print the AST
+// ----- Statement Handling -----
+
+ASTNode *Parser::assignmentStatement()
+{
+    std::string varName = getCurrentToken().value;
+    eat(TokenType::IDENTIFIER);
+    eat(TokenType::ASSIGN);
+    ASTNode *expr = expression();
+    eat(TokenType::SEMICOLON);
+    return new ASTNode(TokenType::ASSIGN, varName, expr);
+}
+
+ASTNode *Parser::ifStatement()
+{
+    eat(TokenType::IF);
+    eat(TokenType::LPAREN);
+    ASTNode *condition = expression();
+    eat(TokenType::RPAREN);
+
+    std::cout << "Condition parsed: " << condition->value << "\n"; // Debugging line
+
+    ASTNode *thenBranch = statement();
+
+    ASTNode *elseBranch = nullptr;
+    if (getCurrentToken().type == TokenType::ELSE)
+    {
+        eat(TokenType::ELSE);
+        std::cout << "Parsing ELSE branch\n"; // Debugging line
+        elseBranch = statement();
+    }
+
+    return new ASTNode(TokenType::IF, "if", condition, thenBranch, elseBranch);
+}
+
+ASTNode *Parser::statement()
+{
+    std::cout << "Current token in statement: " << getCurrentToken().value << "\n"; // Debugging line
+
+    if (getCurrentToken().type == TokenType::IF)
+    {
+        return ifStatement();
+    }
+    else if (getCurrentToken().type == TokenType::IDENTIFIER &&
+             getNextToken().type == TokenType::ASSIGN)
+    {
+        return assignmentStatement();
+    }
+    else
+    {
+        ASTNode *expr = expression();
+        eat(TokenType::SEMICOLON);
+        return expr;
+    }
+}
+
+ASTNode *Parser::block()
+{
+    return statement(); // Simplified for now — one-statement block
+}
+
+// ----- Parser Entry -----
+
 ASTNode *Parser::parse()
 {
-    ASTNode *ast = expression();
+    std::cout << "Starting parsing\n"; // Debugging line
+    ASTNode *ast = statement();
     printAST(ast, 0);
     return ast;
 }
 
-// Prints the Abstract Syntax Tree (AST)
+// ----- AST Printer -----
+
 void Parser::printAST(ASTNode *node, int depth)
 {
-    if (node == nullptr)
+    if (!node)
         return;
 
-    // Print the current node with indentation based on depth
     for (int i = 0; i < depth; ++i)
-        std::cout << "   "; // Indentation
+        std::cout << "   ";
+    std::cout << "+-- " << node->value << "\n";
 
-    std::cout << "+-- " << node->value << "\n"; // Show the node's value (e.g., operand or operator)
-
-    // Recursively print the left child
     printAST(node->left, depth + 1);
-
-    // Recursively print the right child
     printAST(node->right, depth + 1);
+    if (node->extra)
+        printAST(node->extra, depth + 1);
+}
+
+// ----- Evaluator (basic) -----
+
+int Parser::evaluate(ASTNode *node)
+{
+    if (!node)
+        throw std::runtime_error("Null node");
+
+    switch (node->type)
+    {
+    case TokenType::NUMBER:
+        return std::stoi(node->value);
+    case TokenType::PLUS:
+        return evaluate(node->left) + evaluate(node->right);
+    case TokenType::MINUS:
+        return evaluate(node->left) - evaluate(node->right);
+    case TokenType::MULTIPLY:
+        return evaluate(node->left) * evaluate(node->right);
+    case TokenType::DIVIDE:
+        return evaluate(node->left) / evaluate(node->right);
+    case TokenType::GT:
+        return evaluate(node->left) > evaluate(node->right);
+    case TokenType::LT:
+        return evaluate(node->left) < evaluate(node->right);
+    case TokenType::GE:
+        return evaluate(node->left) >= evaluate(node->right);
+    case TokenType::LE:
+        return evaluate(node->left) <= evaluate(node->right);
+    case TokenType::EQ:
+        return evaluate(node->left) == evaluate(node->right);
+    case TokenType::NEQ:
+        return evaluate(node->left) != evaluate(node->right);
+    case TokenType::IF:
+        return evaluate(node->left) ? evaluate(node->right) : evaluate(node->extra);
+    case TokenType::ASSIGN:
+    {
+        int val = evaluate(node->left);
+        variables[node->value] = val;
+        return val;
+    }
+    case TokenType::IDENTIFIER:
+        return variables[node->value];
+    default:
+        throw std::runtime_error("Unknown node type in evaluate()");
+    }
 }
