@@ -13,7 +13,20 @@ enum class TokenType
     DIVIDE,
     LPAREN,
     RPAREN,
-    END
+    IDENTIFIER, // For variable names like x
+    ASSIGN,     // For the assignment operator '='
+    END,
+    IF,
+    ELSE,
+    WHILE,
+    LT,
+    GT,
+    LTE,
+    GTE,
+    EQ,
+    NEQ,
+    LBRACE,
+    RBRACE,
 };
 
 struct Token

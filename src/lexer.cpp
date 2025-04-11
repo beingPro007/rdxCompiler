@@ -26,6 +26,16 @@ std::vector<Token> Lexer::tokenize()
             }
             tokens.push_back({TokenType::NUMBER, num});
         }
+        else if (isalpha(currentChar)) // Detect variable names (identifiers)
+        {
+            std::string id;
+            while (pos < input.length() && isalnum(input[pos]))
+            {
+                id += input[pos];
+                advance();
+            }
+            tokens.push_back({TokenType::IDENTIFIER, id});
+        }
         else if (currentChar == '+')
         {
             tokens.push_back({TokenType::PLUS, "+"});
@@ -56,6 +66,39 @@ std::vector<Token> Lexer::tokenize()
             tokens.push_back({TokenType::RPAREN, ")"});
             advance();
         }
+        else if (currentChar == '=')
+        {
+            tokens.push_back({TokenType::ASSIGN, "="});
+            advance();
+        }
+        else if (currentChar == '{')
+        {
+            tokens.push_back({TokenType::LBRACE, "{"});
+            pos++;
+        }
+        else if (currentChar == '}')
+        {
+            tokens.push_back({TokenType::RBRACE, "}"});
+            pos++;
+        }
+        else if (std::isalpha(currentChar))
+        {
+            std::string identifier;
+            while (pos < input.length() && std::isalnum(input[pos]))
+            {
+                identifier += input[pos++];
+            }
+
+            if (identifier == "if")
+                tokens.push_back({TokenType::IF, identifier});
+            else if (identifier == "else")
+                tokens.push_back({TokenType::ELSE, identifier});
+            else if (identifier == "while")
+                tokens.push_back({TokenType::WHILE, identifier});
+            else
+                tokens.push_back({TokenType::IDENTIFIER, identifier});
+        }
+
         else
         {
             advance(); // Ignore spaces and unknown characters
